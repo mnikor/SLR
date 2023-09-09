@@ -1,0 +1,80 @@
+# Updated Python code to conduct a Systematic Literature Review using PubMed API and GPT-3.5 Turbo
+
+import requests
+import xml.etree.ElementTree as ET
+from docx import Document
+import openai
+import json
+
+def fetch_paper_details(paper_ids, api_key):
+    paper_details = {}
+    ids_string = ','.join(paper_ids)
+    fetch_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id={ids_string}&retmode=xml&api_key={api_key}"
+    response = requests.get(fetch_url)
+    root = ET.fromstring(response.content)
+    for article in root.findall(".//PubmedArticle"):
+        article_id = article.find(".//PMID").text
+        article_title = article.find(".//ArticleTitle").text
+        article_abstract = article.find(".//AbstractText")
+        article_authors = article.findall(".//Author")
+        article_date = article.find(".//PubDate/Year")
+        author_list = []
+        for author in article_authors:
+            firstname = author.find(".//ForeName")
+            lastname = author.find(".//LastName")
+            if firstname is not None and lastname is not None:
+                author_list.append(f"{firstname.text} {lastname.text}")
+        if article_abstract is not None:
+            article_abstract = article_abstract.text
+            paper_details[article_id] = {
+                "title": article_title,
+                "abstract": article_abstract,
+                "authors": ", ".join(author_list),
+                "date": article_date.text if article_date is not None else "N/A"
+            }
+    return paper_details
+
+try:
+    # Initialize APIs
+    print("Initializing APIs...")
+    pubmed_api_key = "e9e5a6445de37219ca2be227c1b164cbf808"
+    openai.api_key = "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"
+    print("APIs initialized.")
+
+    # Initialize Document
+    doc = Document()
+    doc.add_heading('Systematic Literature Review Report', 0)
+    print("Created Word document.")
+
+    # Research Question and PICO elements
+    research_question = "What is the impact of bleeding and the fear of bleeding in AF patients using DOACs?"
+    doc.add_paragraph(f"Research Question: {research_question}")
+    print(f"Added research question: {research_question}")
+
+    # Fetch Initial Paper IDs
+    initial_query = "AF patients DOACs bleeding impact"
+    response = requests.get(f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={initial_query}&api_key={pubmed_api_key}")
+    root = ET.fromstring(response.content)
+    initial_paper_ids = [id_elem.text for id_elem in root.findall(".//Id")]
+    print(f"Initial Paper IDs: {initial_paper_ids}")
+
+    # Fetch Paper Details
+    paper_details = fetch_paper_details(initial_paper_ids, pubmed_api_key)
+
+    # Add Fetched Paper Details to Word Document
+    doc.add_paragraph("Fetched Papers:")
+    for paper_id, details in paper_details.items():
+        doc.add_paragraph(f"Paper ID: {paper_id}")
+        doc.add_paragraph(f"Title: {details['title']}")
+        doc.add_paragraph(f"Abstract: {details['abstract']}")
+        doc.add_paragraph(f"Authors: {details['authors']}")
+        doc.add_paragraph(f"Date: {details['date']}")
+        doc.add_paragraph("------")
+
+    # Save the Document
+    doc_path = "/content/drive/MyDrive/SLR_Report.docx"  # Change this path to where you want to save the Word document
+    doc.save(doc_path)
+    print(f"Report saved at {doc_path}")
+
+except Exception as e:
+    print(f"An error occurred: {e}")
