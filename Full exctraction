@@ -1,0 +1,91 @@
+!pip install openai
+!pip install python-docx
+!pip install biopython
+
+import openai
+from docx import Document
+from Bio import Entrez
+
+# Initialize Document
+doc = Document()
+doc.add_heading('Research Analysis', 0)
+
+# Main Research Question
+main_research_question = "What is the impact of bleeding and the fear of bleeding in AF patients using DOACs?"
+doc.add_heading('Main Research Question:', level=1)
+doc.add_paragraph(main_research_question)
+
+# Generate Alternative Research Questions using GPT-3.5 Turbo
+openai.api_key = ""  # Masked for security reasons
+response = openai.ChatCompletion.create(
+    model="gpt-3.5-turbo-16k",
+    messages=[
+        {"role": "system", "content": "You are a helpful research assistant."},
+        {"role": "user", "content": f"Generate alternative research questions based on the main question: {main_research_question}"}
+    ]
+)
+alternative_questions = response['choices'][0]['message']['content'].strip().split("\n")
+doc.add_heading('Alternative Research Questions:', level=1)
+for question in alternative_questions:
+    doc.add_paragraph(question)
+
+# Generate Keywords using GPT-3.5 Turbo
+response = openai.ChatCompletion.create(
+    model="gpt-3.5-turbo-16k",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": f"Generate keywords related to the research questions: {main_research_question}, {', '.join(alternative_questions)}"}
+    ]
+)
+keywords = response['choices'][0]['message']['content'].strip().split(", ")
+doc.add_heading('Keywords:', level=1)
+doc.add_paragraph(", ".join(keywords))
+
+# PubMed API Key
+Entrez.email = "your_email@example.com"
+Entrez.api_key = "e9e5a6445de37219ca2be227c1b164cbf808"  # Masked for security reasons
+
+def fetch_single_paper_details(paper_id, doc):
+    handle = Entrez.efetch(db="pubmed", id=paper_id, rettype="medline", retmode="xml")
+    records = Entrez.read(handle)
+    
+    record = records['PubmedArticle'][0]
+    article_id = record['MedlineCitation']['PMID']
+    title = record['MedlineCitation']['Article']['ArticleTitle']
+    
+    # Extracting and combining all sections of the abstract with section names
+    if 'Abstract' in record['MedlineCitation']['Article']:
+        abstract_sections = record['MedlineCitation']['Article']['Abstract']['AbstractText']
+        
+        # Check if each section has a label (like 'Background', 'Methods', etc.) and include it
+        abstract = " ".join([f"{section.attributes['Label'] if 'Label' in section.attributes else 'Abstract'}: {section}" for section in abstract_sections])
+    else:
+        abstract = "N/A"
+    
+    authors_list = record['MedlineCitation']['Article']['AuthorList']
+    authors = ', '.join([f"{author.get('ForeName', 'N/A')} {author.get('LastName', 'N/A')}" for author in authors_list])
+    
+    if 'ArticleDate' in record['MedlineCitation']['Article']:
+        date = record['MedlineCitation']['Article']['ArticleDate'][0]['Year'] if record['MedlineCitation']['Article']['ArticleDate'] else "N/A"
+    else:
+        date = "N/A"
+    
+    doc.add_heading(f"Paper ID: {article_id}", level=1)
+    doc.add_paragraph(f"Title: {title}")
+    doc.add_paragraph(f"Abstract: {abstract}")
+    doc.add_paragraph(f"Authors: {authors}")
+    doc.add_paragraph(f"Date: {date}")
+
+
+# Search PubMed for papers based on your keywords
+search_query = "(impact of bleeding AND AF patients AND DOACs) OR (fear of bleeding AND treatment outcomes)"
+handle = Entrez.esearch(db="pubmed", term=search_query, retmax=50)
+record = Entrez.read(handle)
+paper_ids = record["IdList"]
+
+# Fetch details for each paper and add to Word document
+for paper_id in paper_ids:
+    fetch_single_paper_details(paper_id, doc)
+
+# Save the Word document
+doc.save("/content/drive/MyDrive/SLR_Report6.docx")
