@@ -4,6 +4,7 @@
 import openai
 from docx import Document
 from Bio import Entrez
+import datetime
 
 # Initialize Document
 doc = Document()
@@ -42,7 +43,19 @@ keywords = response['choices'][0]['message']['content'].strip().split(", ")
 doc.add_heading('Keywords:', level=1)
 doc.add_paragraph(", ".join(keywords))
 
-# ... [Rest of the code remains the same, including the scoring functions and main process] ...
+# Assuming you've already identified keywords or PICO elements and stored the patient population in a variable called 'desired_population'
+abstracts_info = []
+
+# Update the search query to be dynamic based on the identified patient population
+search_query = f"({desired_population} AND minor and major bleeds AND antithrombotic treatments) OR (fear of bleeding AND treatment outcomes)"
+
+handle = Entrez.esearch(db="pubmed", term=search_query, retmax=50)
+record = Entrez.read(handle)
+paper_ids = record["IdList"]
+
+for paper_id in paper_ids:
+    abstract_info = fetch_and_score_paper_details(paper_id, doc, main_research_question, desired_population)
+    abstracts_info.append(abstract_info)
 
 
 # Scoring functions using GPT model
@@ -126,6 +139,7 @@ def score_population(abstract_text, desired_population):
 
 
 def fetch_and_score_paper_details(paper_id, doc, main_research_question, desired_population):
+    print(f"Processing paper with ID: {paper_id}")  # <-- Add this print statement
     try:
         handle = Entrez.efetch(db="pubmed", id=paper_id, rettype="medline", retmode="xml")
         records = Entrez.read(handle)
@@ -170,6 +184,26 @@ def fetch_and_score_paper_details(paper_id, doc, main_research_question, desired
             'date': date,
             'scores': scores,
             'total_score': total_score
+        }
+
+        return abstract_info
+
+    except Exception as e:
+        print(f"Error processing paper with ID {paper_id}: {e}")  # <-- Modify this to print the error
+        return {
+            'article_id': paper_id,
+            'title': "Error",
+            'abstract': "Error",
+            'authors': "Error",
+            'date': "Error",
+            'scores': {
+                'relevance': 0,
+                'design': 0,
+                'quality': 0,
+                'recency': 0,
+                'population': 0
+            },
+            'total_score': 0
         }
 
         return abstract_info
@@ -224,15 +258,6 @@ def document_abstracts(doc, abstracts):
         doc.add_paragraph(f"Date: {abstract_info['date']}")
         doc.add_paragraph("\n")
 
-# Main Process
-desired_population = "AF patients"
-abstracts_info = []
-search_query = "(impact of bleeding AND AF patients AND DOACs) OR (fear of bleeding AND treatment outcomes)"
-handle = Entrez.esearch(db="pubmed", term=search_query, retmax=50)
-record = Entrez.read(handle)
-paper_ids = record["IdList"]
-for paper_id in paper_ids:
-    abstract_info = fetch_and_score_paper_details(paper_id, doc, main_research_question, desired_population)
-    abstracts_info.append(abstract_info)
+
 document_abstracts(doc, abstracts_info)
-doc.save("/content/drive/MyDrive/SLR_Report_with_Scores.docx")
+doc.save("/content/drive/MyDrive/SLR_Report_with_Scores-6.docx")
