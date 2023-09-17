@@ -5,6 +5,9 @@ import openai
 from docx import Document
 from Bio import Entrez
 import datetime
+from docx.shared import Inches
+from docx.oxml.ns import qn
+
 
 # Initialize Document
 doc = Document()
@@ -20,8 +23,8 @@ main_research_question = "What is the impact of bleeding and the fear of bleedin
 response = openai.ChatCompletion.create(
     model="gpt-3.5-turbo-16k",
     messages=[
-        {"role": "system", "content": "You are a helpful research assistant."},
-        {"role": "user", "content": f"Generate alternative research questions based on the main question: {main_research_question}"}
+        {"role": "system", "content": "You are a research assistant skilled in formulating research questions."},
+        {"role": "user", "content": f"Based on the main research question '{main_research_question}', generate alternative questions that explore different facets of the topic."}
     ]
 )
 alternative_questions = response['choices'][0]['message']['content'].strip().split("\n")
@@ -30,6 +33,7 @@ doc.add_paragraph(main_research_question)
 doc.add_heading('Alternative Research Questions:', level=1)
 for question in alternative_questions:
     doc.add_paragraph(question)
+
 
 # Generate Keywords using GPT-3.5 Turbo
 response = openai.ChatCompletion.create(
@@ -137,9 +141,13 @@ def score_population(abstract_text, desired_population):
     else:
         return 1
 
+from datetime import datetime
 
+from datetime import datetime
+
+# Adjust the fetch_and_score_paper_details function to remove recency
 def fetch_and_score_paper_details(paper_id, doc, main_research_question, desired_population):
-    print(f"Processing paper with ID: {paper_id}")  # <-- Add this print statement
+    print(f"Processing paper with ID: {paper_id}")
     try:
         handle = Entrez.efetch(db="pubmed", id=paper_id, rettype="medline", retmode="xml")
         records = Entrez.read(handle)
@@ -151,8 +159,6 @@ def fetch_and_score_paper_details(paper_id, doc, main_research_question, desired
         # Extracting and combining all sections of the abstract with section names
         if 'Abstract' in record['MedlineCitation']['Article']:
             abstract_sections = record['MedlineCitation']['Article']['Abstract']['AbstractText']
-            
-            # Check if each section has a label (like 'Background', 'Methods', etc.) and include it
             abstract = " ".join([f"{section.attributes['Label'] if 'Label' in section.attributes else 'Abstract'}: {section}" for section in abstract_sections])
         else:
             abstract = "N/A"
@@ -170,7 +176,6 @@ def fetch_and_score_paper_details(paper_id, doc, main_research_question, desired
             'relevance': score_relevance(abstract, main_research_question),
             'design': score_study_design(abstract),
             'quality': score_quality(abstract),
-            'recency': score_recency(date),
             'population': score_population(abstract, desired_population)
         }
         
@@ -189,26 +194,6 @@ def fetch_and_score_paper_details(paper_id, doc, main_research_question, desired
         return abstract_info
 
     except Exception as e:
-        print(f"Error processing paper with ID {paper_id}: {e}")  # <-- Modify this to print the error
-        return {
-            'article_id': paper_id,
-            'title': "Error",
-            'abstract': "Error",
-            'authors': "Error",
-            'date': "Error",
-            'scores': {
-                'relevance': 0,
-                'design': 0,
-                'quality': 0,
-                'recency': 0,
-                'population': 0
-            },
-            'total_score': 0
-        }
-
-        return abstract_info
-
-    except Exception as e:
         print(f"Error processing paper with ID {paper_id}: {e}")
         return {
             'article_id': paper_id,
@@ -220,37 +205,41 @@ def fetch_and_score_paper_details(paper_id, doc, main_research_question, desired
                 'relevance': 0,
                 'design': 0,
                 'quality': 0,
-                'recency': 0,
                 'population': 0
             },
             'total_score': 0
         }
 
+# ... [Continuation from the previous part]
 
-# Document abstracts and scores in Word
 def document_abstracts(doc, abstracts):
-    table = doc.add_table(rows=1, cols=7)
+    # Filter abstracts based on relevance score
+    filtered_abstracts = [abstract for abstract in abstracts if abstract['scores']['relevance'] > 2]
+    
+    table = doc.add_table(rows=1, cols=6)
     table.style = 'Table Grid'
     hdr_cells = table.rows[0].cells
     hdr_cells[0].text = 'Abstract Title'
     hdr_cells[1].text = 'Relevance'
     hdr_cells[2].text = 'Design'
     hdr_cells[3].text = 'Quality'
-    hdr_cells[4].text = 'Recency'
-    hdr_cells[5].text = 'Population'
-    hdr_cells[6].text = 'Total Score'
-    sorted_abstracts = sorted(abstracts, key=lambda x: x['total_score'], reverse=True)
+    hdr_cells[4].text = 'Population'
+    hdr_cells[5].text = 'Total Score'
+    
+    sorted_abstracts = sorted(filtered_abstracts, key=lambda x: x['total_score'], reverse=True)
+    
     for abstract_info in sorted_abstracts:
         row_cells = table.add_row().cells
         row_cells[0].text = abstract_info['title']
         row_cells[1].text = str(abstract_info['scores']['relevance'])
         row_cells[2].text = str(abstract_info['scores']['design'])
         row_cells[3].text = str(abstract_info['scores']['quality'])
-        row_cells[4].text = str(abstract_info['scores']['recency'])
-        row_cells[5].text = str(abstract_info['scores']['population'])
-        row_cells[6].text = str(abstract_info['total_score'])
+        row_cells[4].text = str(abstract_info['scores']['population'])
+        row_cells[5].text = str(abstract_info['total_score'])
+        
     doc.add_paragraph("\n")
-    for abstract_info in sorted_abstracts[:10]:
+    
+    for abstract_info in sorted_abstracts[:10]:  # Take top 15 after sorting
         doc.add_heading(f"Paper ID: {abstract_info['article_id']}", level=1)
         doc.add_paragraph(f"Title: {abstract_info['title']}")
         doc.add_paragraph(f"Abstract: {abstract_info['abstract']}")
@@ -258,6 +247,5 @@ def document_abstracts(doc, abstracts):
         doc.add_paragraph(f"Date: {abstract_info['date']}")
         doc.add_paragraph("\n")
 
-
 document_abstracts(doc, abstracts_info)
-doc.save("/content/drive/MyDrive/SLR_Report_with_Scores-6.docx")
+doc.save("/content/drive/MyDrive/SLR_Report_with_Scores-7.docx")
