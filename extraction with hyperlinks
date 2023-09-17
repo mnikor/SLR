@@ -23,8 +23,8 @@ main_research_question = "What is the impact of bleeding and the fear of bleedin
 response = openai.ChatCompletion.create(
     model="gpt-3.5-turbo-16k",
     messages=[
-        {"role": "system", "content": "You are a helpful research assistant."},
-        {"role": "user", "content": f"Generate alternative research questions based on the main question: {main_research_question}"}
+        {"role": "system", "content": "You are a research assistant skilled in formulating research questions."},
+        {"role": "user", "content": f"Based on the main research question '{main_research_question}', generate alternative questions that explore different facets of the topic."}
     ]
 )
 alternative_questions = response['choices'][0]['message']['content'].strip().split("\n")
