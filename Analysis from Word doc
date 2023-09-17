@@ -1,0 +1,84 @@
+!pip install openai
+!pip install python-docx
+!pip install biopython
+
+import openai
+from docx import Document
+
+def extract_abstracts_and_question_from_word(doc_path):
+    doc = Document(doc_path)
+    abstracts = []
+    main_research_question = doc.paragraphs[0].text.strip()  # Extracting the main research question
+
+    # Flag to mark the end of the table
+    table_ended = False
+
+    for paragraph in doc.paragraphs:
+        # Skip everything before the end of the table
+        if not table_ended and paragraph.style.name.startswith('Table'):
+            continue
+        
+        # Once we detect a paragraph that's not a table, we know the table has ended
+        if not paragraph.style.name.startswith('Table'):
+            table_ended = True
+        
+        # The rest of the paragraphs will be treated as abstracts after the table has ended
+        if table_ended and paragraph.text.strip() and not paragraph.style.name.startswith('Heading'):
+            abstracts.append(paragraph.text)
+
+    return abstracts, main_research_question
+
+def chunk_abstracts_by_theme(abstracts, themes):
+    thematic_groups = {theme: [] for theme in themes}
+    for abstract in abstracts:
+        for theme in themes:
+            if theme in abstract:
+                thematic_groups[theme].append(abstract)
+                break
+    return thematic_groups
+
+def generate_insight_for_theme(theme_abstracts, main_research_question):
+    instructions = (
+        f"Given the abstracts provided, provide comprehensive analysis and synthesize as  an evidence-based report addressing the main research question: "
+        f"'{main_research_question}'. Your synthesis should be structured with: "
+          f"If some abstracts are not adressing the research question then do not include them in the analysis "
+        f"\n\n1. An introduction."
+        f"\n2. Main findings based on the abstracts."
+        f"\n3. Any limitations found in the abstracts or the synthesized report."
+        f"\n4. Recommendations for further research based on any gaps or unanswered questions."
+        f"\n\nEnsure that the insights are directly drawn from the abstracts and not made up. Here are the abstracts for the theme {theme}:"
+    )
+  
+    for abstract in theme_abstracts:
+        instructions += "\n\n- " + abstract
+    response = openai.ChatCompletion.create(
+      model="gpt-4",
+      messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": instructions}
+        ]
+    )
+    insight = response['choices'][0]['message']['content']
+    return insight
+
+def save_insights_to_word(insights, save_path):
+    doc = Document()
+    doc.add_heading('Synthesized Insights', level=0)
+    for theme, insight in insights.items():
+        doc.add_heading(theme, level=1)
+        doc.add_paragraph(insight)
+    doc.save(save_path)
+
+# Execution
+openai.api_key = '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'
+doc_path = "/content/drive/MyDrive/SLR_Report_with_Scores-67.docx"
+abstracts, main_research_question = extract_abstracts_and_question_from_word(doc_path)
+themes = ["bleeding", "DOACs", "anxiety"]
+thematic_groups = chunk_abstracts_by_theme(abstracts, themes)
+
+insights = {}
+for theme, theme_abstracts in thematic_groups.items():
+    insights[theme] = generate_insight_for_theme(theme_abstracts, main_research_question)
+
+save_path = "/content/drive/MyDrive/Synthesized_Insights2.docx"
+save_insights_to_word(insights, save_path)
