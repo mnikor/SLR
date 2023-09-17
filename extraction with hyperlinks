@@ -34,6 +34,7 @@ doc.add_heading('Alternative Research Questions:', level=1)
 for question in alternative_questions:
     doc.add_paragraph(question)
 
+
 # Generate Keywords using GPT-3.5 Turbo
 response = openai.ChatCompletion.create(
     model="gpt-3.5-turbo-16k",
@@ -140,19 +141,46 @@ def score_population(abstract_text, desired_population):
     else:
         return 1
 
+from datetime import datetime
+
+from datetime import datetime
 
 def fetch_and_score_paper_details(paper_id, doc, main_research_question, desired_population):
-    print(f"Processing paper with ID: {paper_id}")  # Logging
+    print(f"Processing paper with ID: {paper_id}")
     try:
         handle = Entrez.efetch(db="pubmed", id=paper_id, rettype="medline", retmode="xml")
         records = Entrez.read(handle)
-
+        
         record = records['PubmedArticle'][0]
         article_id = record['MedlineCitation']['PMID']
         title = record['MedlineCitation']['Article']['ArticleTitle']
-
-        # Construct the URL to the abstract on PubMed
+        
+        # Extract the abstract URL (assuming it's the standard PubMed URL format)
         abstract_url = f"https://pubmed.ncbi.nlm.nih.gov/{article_id}/"
+        
+
+
+        # Update the abstract_info dictionary to include the abstract URL
+        abstract_info = {
+            'article_id': article_id,
+            'title': title,
+            'abstract': abstract,
+            'authors': authors,
+            'date': date,
+            'scores': scores,
+            'total_score': total_score,
+            'abstract_url': abstract_url  # Add this line
+        }
+
+        return abstract_info
+
+    except Exception as e:
+        print(f"Error processing paper with ID {paper_id}: {e}")
+        return {
+            # ... [rest of the code remains unchanged]
+        }
+
+
 
         # Extracting and combining all sections of the abstract with section names
         if 'Abstract' in record['MedlineCitation']['Article']:
@@ -160,26 +188,25 @@ def fetch_and_score_paper_details(paper_id, doc, main_research_question, desired
             abstract = " ".join([f"{section.attributes['Label'] if 'Label' in section.attributes else 'Abstract'}: {section}" for section in abstract_sections])
         else:
             abstract = "N/A"
-
+        
         authors_list = record['MedlineCitation']['Article']['AuthorList']
         authors = ', '.join([f"{author.get('ForeName', 'N/A')} {author.get('LastName', 'N/A')}" for author in authors_list])
-
+        
         if 'ArticleDate' in record['MedlineCitation']['Article']:
             date = record['MedlineCitation']['Article']['ArticleDate'][0]['Year'] if record['MedlineCitation']['Article']['ArticleDate'] else "N/A"
         else:
             date = "N/A"
 
-        # Scoring Logic (assuming this continues from here...)
+        # Scoring Logic
         scores = {
             'relevance': score_relevance(abstract, main_research_question),
             'design': score_study_design(abstract),
             'quality': score_quality(abstract),
-            'recency': score_recency(date),
             'population': score_population(abstract, desired_population)
         }
-
+        
         total_score = sum(scores.values())
-
+        
         abstract_info = {
             'article_id': article_id,
             'title': title,
@@ -193,49 +220,6 @@ def fetch_and_score_paper_details(paper_id, doc, main_research_question, desired
 
         return abstract_info
 
-    except Exception as e:
-        print(f"Error processing paper with ID {paper_id}: {e}")
-        return {
-            'article_id': paper_id,
-            'title': "Error",
-            'abstract': "Error",
-            'authors': "Error",
-            'date': "Error",
-            'abstract_url': "Error",  # Ensure this line exists
-            'scores': {
-                'relevance': 0,
-                'design': 0,
-                'quality': 0,
-                'recency': 0,
-                'population': 0
-            },
-            'total_score': 0
-        }
-
-
-        # Scoring Logic
-        scores = {
-            'relevance': score_relevance(abstract, main_research_question),
-            'design': score_study_design(abstract),
-            'quality': score_quality(abstract),
-            'recency': score_recency(date),
-            'population': score_population(abstract, desired_population)
-        }
-
-        total_score = sum(scores.values())
-
-        abstract_info = {
-            'article_id': article_id,
-            'title': title,
-            'abstract': abstract,
-            'authors': authors,
-            'date': date,
-            'abstract_url': abstract_url,  # Added this
-            'scores': scores,
-            'total_score': total_score
-        }
-
-        return abstract_info
 
     except Exception as e:
         print(f"Error processing paper with ID {paper_id}: {e}")
@@ -245,26 +229,14 @@ def fetch_and_score_paper_details(paper_id, doc, main_research_question, desired
             'abstract': "Error",
             'authors': "Error",
             'date': "Error",
-            'abstract_url': "Error",  # Added this
             'scores': {
                 'relevance': 0,
                 'design': 0,
                 'quality': 0,
-                'recency': 0,
                 'population': 0
             },
             'total_score': 0
         }
-
-
-
-from docx import Document
-from docx.shared import Pt
-from docx.oxml.ns import qn
-from docx.oxml import OxmlElement
-from docx.enum.text import WD_PARAGRAPH_ALIGNMENT, WD_ALIGN_PARAGRAPH
-from docx.shared import Inches, RGBColor
-from docx import opc
 
 def add_hyperlink(paragraph, text, url):
     part = paragraph.part
@@ -292,9 +264,8 @@ def add_hyperlink(paragraph, text, url):
 
     return hyperlink
 
-
 def document_abstracts(doc, abstracts):
-    doc.add_heading('Top 10 Abstracts Based on Scoring', level=1)
+    doc.add_heading('Top 15 Abstracts Based on Scoring', level=1)
     
     table = doc.add_table(rows=1, cols=8)
     table.style = 'Table Grid'
@@ -316,7 +287,6 @@ def document_abstracts(doc, abstracts):
     hdr_cells[1].text = 'Relevance'
     hdr_cells[2].text = 'Design'
     hdr_cells[3].text = 'Quality'
-    hdr_cells[4].text = 'Recency'
     hdr_cells[5].text = 'Population'
     hdr_cells[6].text = 'Total Score'
     hdr_cells[7].text = 'Abstract URL'
@@ -328,7 +298,6 @@ def document_abstracts(doc, abstracts):
         row_cells[1].text = str(abstract_info['scores']['relevance'])
         row_cells[2].text = str(abstract_info['scores']['design'])
         row_cells[3].text = str(abstract_info['scores']['quality'])
-        row_cells[4].text = str(abstract_info['scores']['recency'])
         row_cells[5].text = str(abstract_info['scores']['population'])
         row_cells[6].text = str(abstract_info['total_score'])
         row_cells[7].text = abstract_info['abstract_url']
@@ -341,7 +310,6 @@ def document_abstracts(doc, abstracts):
         doc.add_paragraph(f"Relevance Score: {abstract_info['scores']['relevance']}")
         doc.add_paragraph(f"Design Score: {abstract_info['scores']['design']}")
         doc.add_paragraph(f"Quality Score: {abstract_info['scores']['quality']}")
-        doc.add_paragraph(f"Recency Score: {abstract_info['scores']['recency']}")
         doc.add_paragraph(f"Population Score: {abstract_info['scores']['population']}")
         doc.add_paragraph(f"Total Score: {abstract_info['total_score']}")
         p = doc.add_paragraph("Abstract URL: ")
@@ -350,4 +318,4 @@ def document_abstracts(doc, abstracts):
         doc.add_paragraph("\n")
 
 document_abstracts(doc, abstracts_info)
-doc.save("/content/drive/MyDrive/SLR_Report_with_Scores-67.docx")
+doc.save("/content/drive/MyDrive/SLR_Report_with_Scores-8.docx")
