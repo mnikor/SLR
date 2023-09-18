@@ -1,0 +1,314 @@
+!pip install openai
+!pip install python-docx
+!pip install biopython
+import openai
+from docx import Document
+from Bio import Entrez
+import datetime
+from docx.shared import Inches
+from docx.oxml.ns import qn
+from docx import opc  # Importing the required module
+from docx.oxml import OxmlElement, ns  
+
+# The rest of your code remains unchanged.
+
+# The rest of your code remains unchanged.
+
+
+# Initialize Document
+doc = Document()
+doc.add_heading('Research Analysis', 0)
+
+# Configuration
+openai.api_key = ""
+Entrez.email = "your_email@example.com"
+Entrez.api_key = "e9e5a6445de37219ca2be227c1b164cbf808"
+main_research_question = "What is the  effectiveness and quality of life of treatment-resistant depression (TRD) and major depressive disorder (MDD) patients in real world setting experiencing psychiatric emergencies, and what are the current treatment strategies, outcomes, and unmet needs in this patient population"
+
+# Generate Alternative Research Questions using GPT-3.5 Turbo
+response = openai.ChatCompletion.create(
+    model="gpt-3.5-turbo-16k",
+    messages=[
+        {"role": "system", "content": "You are a research assistant skilled in formulating research questions."},
+        {"role": "user", "content": f"Based on the main research question '{main_research_question}', generate alternative questions that explore different facets of the topic."}
+    ]
+)
+alternative_questions = response['choices'][0]['message']['content'].strip().split("\n")
+doc.add_heading('Main Research Question:', level=1)
+doc.add_paragraph(main_research_question)
+doc.add_heading('Alternative Research Questions:', level=1)
+for question in alternative_questions:
+    doc.add_paragraph(question)
+
+
+# Generate Keywords using GPT-3.5 Turbo
+response = openai.ChatCompletion.create(
+    model="gpt-3.5-turbo-16k",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": f"Generate keywords related to the research questions: {main_research_question}, {', '.join(alternative_questions)}"}
+    ]
+)
+keywords = response['choices'][0]['message']['content'].strip().split(", ")
+doc.add_heading('Keywords:', level=1)
+doc.add_paragraph(", ".join(keywords))
+
+# Assuming you've already identified keywords or PICO elements and stored the patient population in a variable called 'desired_population'
+abstracts_info = []
+
+# Update the search query to be dynamic based on the identified patient population
+search_query = " OR ".join(keywords)
+
+
+handle = Entrez.esearch(db="pubmed", term=search_query, retmax=50)
+record = Entrez.read(handle)
+paper_ids = record["IdList"]
+
+
+for paper_id in paper_ids:
+    abstract_info = fetch_and_score_paper_details(paper_id, doc, main_research_question, desired_population)
+    abstracts_info.append(abstract_info)
+
+
+# Scoring functions using GPT model
+def score_relevance(abstract_text, question):
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo-16k",
+        prompt=f"Rate the relevance of the following abstract to the research question '{question}':\n\n{abstract_text}\n\nRate as: Very Relevant, Somewhat Relevant, Not Relevant.",
+        max_tokens=50
+    )
+    relevance_response = response.choices[0].text.strip().lower()
+    if "very relevant" in relevance_response:
+        return 3
+    elif "somewhat relevant" in relevance_response:
+        return 2
+    else:
+        return 1
+
+def score_relevance(abstract_text, question):
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo-16k",
+        messages=[
+            {"role": "system", "content": "You are a research evaluator."},
+            {"role": "user", "content": f"Rate the relevance of the following abstract to the research question '{question}':\n\n{abstract_text}\n\nRate as: Very Relevant, Somewhat Relevant, Not Relevant."}
+        ]
+    )
+    relevance_response = response['choices'][0]['message']['content'].strip().lower()
+    if "very relevant" in relevance_response:
+        return 3
+    elif "somewhat relevant" in relevance_response:
+        return 2
+    else:
+        return 1
+
+def score_study_design(abstract_text):
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo-16k",
+        messages=[
+            {"role": "system", "content": "You are a research evaluator."},
+            {"role": "user", "content": f"Identify the study design from the following abstract:\n\n{abstract_text}\n\nOptions: Randomized Controlled Trial, Cohort Study, Systematic Review, Others."}
+        ]
+    )
+    design_response = response['choices'][0]['message']['content'].strip().lower()
+    if "randomized controlled trial" in design_response or "systematic review" in design_response:
+        return 3
+    elif "cohort study" in design_response:
+        return 2
+    else:
+        return 1
+
+def score_quality(abstract_text):
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo-16k",
+        messages=[
+            {"role": "system", "content": "You are a research evaluator."},
+            {"role": "user", "content": f"Rate the quality of the following abstract based on its content:\n\n{abstract_text}\n\nRate as: High-Quality, Moderate Quality, Low Quality."}
+        ]
+    )
+    quality_response = response['choices'][0]['message']['content'].strip().lower()
+    if "high-quality" in quality_response:
+        return 3
+    elif "moderate quality" in quality_response:
+        return 2
+    else:
+        return 1
+
+def score_population(abstract_text, desired_population):
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo-16k",
+        messages=[
+            {"role": "system", "content": "You are a research evaluator."},
+            {"role": "user", "content": f"Does the following abstract focus on {desired_population}?\n\n{abstract_text}\n\nAnswer as: Directly relevant, Somewhat relevant, Not relevant."}
+        ]
+    )
+    population_response = response['choices'][0]['message']['content'].strip().lower()
+    if "directly relevant" in population_response:
+        return 3
+    elif "somewhat relevant" in population_response:
+        return 2
+    else:
+        return 1
+
+from datetime import datetime
+
+from datetime import datetime
+
+def fetch_and_score_paper_details(paper_id, doc, main_research_question, desired_population):
+    print(f"Processing paper with ID: {paper_id}")
+    abstract = "N/A"  # Default assignment for abstract
+    try:
+        handle = Entrez.efetch(db="pubmed", id=paper_id, rettype="medline", retmode="xml")
+        records = Entrez.read(handle)
+        
+        record = records['PubmedArticle'][0]
+        article_id = record['MedlineCitation']['PMID']
+        title = record['MedlineCitation']['Article']['ArticleTitle']
+        
+        # Extract the abstract URL (assuming it's the standard PubMed URL format)
+        abstract_url = f"https://pubmed.ncbi.nlm.nih.gov/{article_id}/"
+        
+        # Extracting and combining all sections of the abstract with section names
+        if 'Abstract' in record['MedlineCitation']['Article']:
+            abstract_sections = record['MedlineCitation']['Article']['Abstract']['AbstractText']
+            abstract = " ".join([f"{section.attributes['Label'] if 'Label' in section.attributes else 'Abstract'}: {section}" for section in abstract_sections])
+        
+        authors_list = record['MedlineCitation']['Article']['AuthorList']
+        authors = ', '.join([f"{author.get('ForeName', 'N/A')} {author.get('LastName', 'N/A')}" for author in authors_list])
+        
+        if 'ArticleDate' in record['MedlineCitation']['Article']:
+            date = record['MedlineCitation']['Article']['ArticleDate'][0]['Year'] if record['MedlineCitation']['Article']['ArticleDate'] else "N/A"
+        else:
+            date = "N/A"
+
+        # Scoring Logic
+        scores = {
+            'relevance': score_relevance(abstract, main_research_question),
+            'design': score_study_design(abstract),
+            'quality': score_quality(abstract),
+            'population': score_population(abstract, desired_population)
+        }
+        
+        total_score = sum(scores.values())
+        
+        abstract_info = {
+            'article_id': article_id,
+            'title': title,
+            'abstract': abstract,
+            'authors': authors,
+            'date': date,
+            'scores': scores,
+            'total_score': total_score,
+            'abstract_url': abstract_url
+        }
+
+        return abstract_info
+
+    except Exception as e:
+        print(f"Error processing paper with ID {paper_id}: {e}")
+        return {
+            'article_id': paper_id,
+            'title': "Error",
+            'abstract': "Error fetching abstract",
+            'authors': "Error",
+            'date': "Error",
+            'scores': {
+                'relevance': 0,
+                'design': 0,
+                'quality': 0,
+                'population': 0
+            },
+            'total_score': 0,
+            'abstract_url': f"https://pubmed.ncbi.nlm.nih.gov/{paper_id}/"
+        }
+
+# This is the revised fetch_and_score_paper_details function.
+# You can use this function in place of the original one in your code.
+
+
+# The rest of your code remains unchanged.
+
+def add_hyperlink(paragraph, text, url):
+    part = paragraph.part
+    r_id = part.relate_to(url, opc.constants.RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
+    
+    hyperlink = OxmlElement('w:hyperlink')
+    hyperlink.set(qn('r:id'), r_id)
+
+    new_run = OxmlElement('w:r')
+    rPr = OxmlElement('w:rPr')
+    
+    # Set the style attributes for the text
+    color = OxmlElement('w:color')
+    color.set(qn('w:val'), '0000FF')
+    u = OxmlElement('w:u')
+    u.set(qn('w:val'), 'single')
+    rPr.append(color)
+    rPr.append(u)
+
+    new_run.append(rPr)
+    new_run.text = text
+    hyperlink.append(new_run)
+    
+    paragraph._element.append(hyperlink)
+
+    return hyperlink
+
+def document_abstracts(doc, abstracts):
+    doc.add_heading('Top 15 Abstracts Based on Scoring', level=1)
+    
+    table = doc.add_table(rows=1, cols=7)
+    table.style = 'Table Grid'
+    table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    table.autofit = False
+    
+    # Set column widths
+    for column in table.columns:
+        for cell in column.cells:
+            if column == table.columns[0]:
+                cell.width = Inches(3.5)
+            elif column == table.columns[-1]:
+                cell.width = Inches(1.5)
+            else:
+                cell.width = Inches(0.5)
+
+    hdr_cells = table.rows[0].cells
+    hdr_cells[0].text = 'Abstract Title'
+    hdr_cells[1].text = 'Relevance'
+    hdr_cells[2].text = 'Design'
+    hdr_cells[3].text = 'Quality'
+    hdr_cells[4].text = 'Population'
+    hdr_cells[5].text = 'Total Score'
+    hdr_cells[6].text = 'Abstract URL'
+
+    # Sort and populate table
+    sorted_abstracts = sorted(abstracts, key=lambda x: x['total_score'], reverse=True)
+    for abstract_info in sorted_abstracts[:10]:
+        row_cells = table.add_row().cells
+        row_cells[0].text = abstract_info['title']
+        row_cells[1].text = str(abstract_info['scores']['relevance'])
+        row_cells[2].text = str(abstract_info['scores']['design'])
+        row_cells[3].text = str(abstract_info['scores']['quality'])
+        row_cells[4].text = str(abstract_info['scores']['population'])
+        row_cells[5].text = str(abstract_info['total_score'])
+        row_cells[6].text = abstract_info['abstract_url']
+
+    doc.add_paragraph("\n")
+    for abstract_info in sorted_abstracts[:10]:
+        doc.add_heading(abstract_info['title'], level=2)
+        doc.add_paragraph(f"Authors: {abstract_info['authors']}")
+        doc.add_paragraph(f"Date: {abstract_info['date']}")
+        doc.add_paragraph(f"Relevance Score: {abstract_info['scores']['relevance']}")
+        doc.add_paragraph(f"Design Score: {abstract_info['scores']['design']}")
+        doc.add_paragraph(f"Quality Score: {abstract_info['scores']['quality']}")
+        doc.add_paragraph(f"Population Score: {abstract_info['scores']['population']}")
+        doc.add_paragraph(f"Total Score: {abstract_info['total_score']}")
+        p = doc.add_paragraph("Abstract URL: ")
+        add_hyperlink(p, abstract_info['abstract_url'], abstract_info['abstract_url'])
+        doc.add_paragraph(abstract_info['abstract'])
+        doc.add_paragraph("\n")
+
+# The table population logic has been moved inside the document_abstracts function.
+
+
+document_abstracts(doc, abstracts_info)
+doc.save("/content/drive/MyDrive/SLR_Report_with_Scores-8.docx")
