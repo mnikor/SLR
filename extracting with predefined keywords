@@ -1,0 +1,73 @@
+# Importing required libraries
+!pip install openai
+!pip install python-docx
+!pip install biopython
+
+import openai
+from docx import Document
+from Bio import Entrez
+from docx.shared import Inches
+from docx.oxml.ns import qn
+from docx import opc  
+from docx.oxml import OxmlElement, ns
+from datetime import datetime
+
+# Configuration
+openai.api_key = "V"
+Entrez.email = "your_email@example.com"
+Entrez.api_key = "e9e5a6445de37219ca2be227c1b164cbf808"
+main_research_question = "What is the impact of bleeding and the fear of bleeding in AF patients using DOACs?"
+desired_population = "patient with atrial fibrilation using DOACs"  # This is just a placeholder. You can replace it with an appropriate value.
+
+# Initialize Document
+doc = Document()
+doc.add_heading('Research Analysis', 0)
+
+# Generate Alternative Research Questions using GPT-3.5 Turbo
+response = openai.ChatCompletion.create(
+    model="gpt-4",
+    messages=[
+        {"role": "system", "content": "You are a research assistant skilled in formulating research questions."},
+        {"role": "user", "content": f"Based on the main research question '{main_research_question}', generate alternative questions that explore different facets of the topic."}
+    ]
+)
+alternative_questions = response['choices'][0]['message']['content'].strip().split("\n")
+doc.add_heading('Main Research Question:', level=1)
+doc.add_paragraph(main_research_question)
+doc.add_heading('Alternative Research Questions:', level=1)
+for question in alternative_questions:
+    doc.add_paragraph(question)
+
+# Generate Keywords using GPT-3.5 Turbo
+response = openai.ChatCompletion.create(
+    model="gpt-4",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": f"Generate keywords related to the research questions relevant for PubMed search: {main_research_question}, {', '.join(alternative_questions)}"}
+    ]
+)
+keywords = response['choices'][0]['message']['content'].strip().split(", ")
+doc.add_heading('Keywords:', level=1)
+doc.add_paragraph(", ".join(keywords))
+
+components = [
+    "impact of bleeding in AF patients using DOACs",
+    "fear of bleeding in AF patients using DOACs",
+    "quality of life in AF patients"
+]
+
+
+
+# Using combined keywords to create the search query
+search_query = " OR ".join([f'"{keyword}"[tiab]' for keyword in keywords])
+
+handle = Entrez.esearch(db="pubmed", term=search_query, retmax=10)
+record = Entrez.read(handle)
+paper_ids = record["IdList"]
+
+for paper_id in paper_ids:
+    abstract_info = fetch_and_score_paper_details(paper_id, doc, main_research_question, desired_population)
+    abstracts_info.append(abstract_info)
+
+document_abstracts(doc, abstracts_info)
+doc.save("/content/drive/MyDrive/test.docx")
