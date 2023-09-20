@@ -1,0 +1,31 @@
+# Set up OpenAI API key
+openai.api_key = ""
+
+
+
+# Define the main research question
+main_research_question = "What is the impact of bleeding and the fear of bleeding in AF patients using DOACs?"
+
+# Construct the instruction for GPT in a chat format
+messages = [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {
+        "role": "user",
+        "content": (
+            f"Given the research question \"{main_research_question}\", analyze the question and extract "
+            "the core concepts and specific outcomes. Using the extracted information, generate a concise "
+            "and optimized PubMed search query that emphasizes the main themes, ensuring it captures the "
+            "essence of the research question while being suitable for PubMed's search mechanism."
+        )
+    }
+]
+
+# Query GPT-3.5-turbo in chat format
+response = openai.ChatCompletion.create(
+    model="gpt-3.5-turbo",
+    messages=messages
+)
+
+# Extract and print the generated PubMed search query
+search_query = response.choices[0].message['content'].strip()
+print("Constructed PubMed Search Query:", search_query)
