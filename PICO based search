@@ -1,0 +1,47 @@
+import openai
+from Bio import Entrez
+
+# OpenAI Configuration
+openai.api_key = "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"
+
+# Entrez Configuration
+Entrez.email = "your_email@example.com"
+Entrez.api_key = "e9e5a6445de37219ca2be227c1b164cbf808"
+# Define the main research question
+main_research_question = "What is the impact of bleeding and the fear of bleeding in AF patients using DOACs compared to other non-DOAC treatments?"
+
+import openai
+
+
+# Step 1: Ask GPT-3 to identify the PICO elements
+response = openai.ChatCompletion.create(
+    model="gpt-3.5-turbo",
+    messages=[
+        {"role": "system", "content": "You are a helpful research assistant."},
+        {"role": "user", "content": f"Identify the PICO (Patient, Intervention, Comparison, Outcome) elements from the research question: '{main_research_question}'"}
+    ]
+)
+
+identified_pico = response['choices'][0]['message']['content'].strip()
+
+# Step 2: Prompt GPT-3 to generate a search query based on the identified PICO elements
+response_query = openai.ChatCompletion.create(
+    model="gpt-3.5-turbo",
+    messages=[
+        {"role": "system", "content": "You are a helpful research assistant."},
+        {"role": "user", "content": f"Based on the identified PICO elements: {identified_pico}, generate a concise and optimized PubMed search query."}
+    ]
+)
+
+search_query = response_query['choices'][0]['message']['content'].strip()
+
+print("Constructed PubMed Search Query:", search_query)
+
+handle = Entrez.esearch(db="pubmed", term=search_query, retmax=50)
+record = Entrez.read(handle)
+paper_ids = record["IdList"]
+
+
+for paper_id in paper_ids:
+    abstract_info = fetch_and_score_paper_details(paper_id, doc, main_research_question, desired_population)
+    abstracts_info.append(abstract_info)
