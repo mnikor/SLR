@@ -1,0 +1,83 @@
+!pip install openai
+!pip install python-docx
+!pip install biopython
+
+import openai
+from docx import Document
+
+def extract_abstracts_and_question_from_word(doc_path):
+    doc = Document(doc_path)
+    abstracts = []
+    main_research_question = doc.paragraphs[0].text.strip()
+
+    table_ended = False
+    for paragraph in doc.paragraphs:
+        if not table_ended and paragraph.style.name.startswith('Table'):
+            continue
+        if not paragraph.style.name.startswith('Table'):
+            table_ended = True
+        if table_ended and paragraph.text.strip() and not paragraph.style.name.startswith('Heading'):
+            abstracts.append(paragraph.text)
+    return abstracts, main_research_question
+
+def generate_insight_for_abstracts(abstracts, main_research_question):
+    MAX_TOKENS = 4500
+    BASE_INSTRUCTIONS = (
+        "You are a systematic literature review expert. "
+        f"Define PICO for the research question: What are the treatment strategies for treatment-resistant depression  (TRD) and Major depressive disorder (MDD) patients in real life experiencing psychiatric emergency?"
+        f"Identify key insights from each abstract in sequence and define relevance to the main research question based on PRISMA checklist. "
+        f"Identify the most relevant abstracts based to answer research question"
+        f"synthesises key insights from relevant abstarcts and write comprehensive systematic literature review report"
+                "Please ignore abstracts that do not contribute towards answering the research question. "
+        "Your synthesis should be well structured as sytematic literature review with:"
+        f"\n\n1. An introduction that provides an overview of the topic based on stated  research question."
+        f"\n2. Detailed main findings based on the abstracts. Elaborate on key conclusions from each abstract and reference them accordingly."
+        f"\n3. Any limitations found in the abstracts or the synthesized report."
+        f"\n4. Recommendations for further research based on any gaps or unanswered questions."
+        f"\n\nEnsure that the insights are directly drawn from the abstracts and not made up. When making a point or conclusion based on an abstract, reference that abstract appropriately by first author."
+        f"'{main_research_question}'."
+    )
+
+    combined_insight = ""
+    chunk = ""
+    for abstract in abstracts:
+        new_chunk = chunk + "\n\n- " + abstract
+        if len(new_chunk) > MAX_TOKENS:
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": BASE_INSTRUCTIONS + chunk}
+                ]
+            )
+            combined_insight += response['choices'][0]['message']['content'] + "\n\n"
+            chunk = "\n\n- " + abstract
+        else:
+            chunk = new_chunk
+
+    # Handle the last chunk if it exists
+    if chunk:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": BASE_INSTRUCTIONS + chunk}
+            ]
+        )
+        combined_insight += response['choices'][0]['message']['content']
+
+    return combined_insight
+
+def save_insight_to_word(insight, save_path):
+    doc = Document()
+    doc.add_heading('Synthesized Insight from Systematic Literature Review', level=0)
+    doc.add_paragraph(insight)
+    doc.save(save_path)
+
+# Execution
+openai.api_key = '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'
+doc_path = "/content/drive/MyDrive/SLR_ReportTRD.docx"
+abstracts, main_research_question = extract_abstracts_and_question_from_word(doc_path)
+insight = generate_insight_for_abstracts(abstracts, main_research_question)
+save_path = "/content/drive/MyDrive/Synthesized_Insight_TRD.docx"
+save_insight_to_word(insight, save_path)
